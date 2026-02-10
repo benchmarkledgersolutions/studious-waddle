@@ -1,0 +1,715 @@
+import React, { useState, useEffect, useMemo, forwardRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Plus, Trash2, PieChart, Wallet, ArrowUpRight, ArrowDownLeft, X, 
+  LayoutGrid, List, ArrowLeft, Calendar, Edit3, Settings, 
+  PlusCircle, Tag, Info, CheckCircle2, Heart, Save, Globe, Users,
+  UserPlus, ShieldCheck, BadgeCheck
+} from 'lucide-react';
+
+/**
+ * PennyPop - A Bubbly Nonprofit Fund Accounting App
+ */
+
+// --- Constants & Config ---
+const STORAGE_KEY = 'pennyPopData_v3';
+
+const CAUSE_ICONS = [
+  { icon: '🌲', label: 'Environment' },
+  { icon: '🏠', label: 'Housing' },
+  { icon: '🐾', label: 'Animals' },
+  { icon: '🎨', label: 'Arts' },
+  { icon: '📚', label: 'Education' },
+  { icon: '🍎', label: 'Food Security' },
+  { icon: '🏥', label: 'Healthcare' },
+  { icon: '🍬', label: 'General' },
+];
+
+const USER_ICONS = ['👩‍💼', '👨‍💼', '👩‍💻', '👨‍💻', '👩‍🎨', '👨‍🎨', '👩‍🔬', '👨‍🔬', '👤', '🦁', '🦊', '🦄'];
+
+const DEFAULT_DATA = {
+  profile: {
+    name: 'PennyPop',
+    mission: 'Making nonprofit accounting sweet and simple.',
+    icon: '🍬'
+  },
+  users: [
+    { id: 'u1', firstName: 'Alex', lastName: 'Rivera', title: 'Executive Director', icon: '👩‍💼' },
+    { id: 'u2', firstName: 'Jordan', lastName: 'Smith', title: 'Treasurer', icon: '👨‍💻' },
+  ],
+  transactions: [
+    { id: 1, date: '2023-10-01', description: 'State Grant Receipt', amount: 5000, type: 'income', fund: 'General Fund', grant: '2024 State Grant 🏛️', userId: 'u1' },
+    { id: 2, date: '2023-10-05', description: 'Office Supplies', amount: 120.50, type: 'expense', fund: 'General Fund', grant: 'None', userId: 'u2' },
+  ],
+  funds: [
+    { id: 'f1', name: 'General Fund', icon: '🍎', type: 'Unrestricted', color: 'bg-rose-100 text-rose-600 border-rose-200' },
+    { id: 'f2', name: 'Scholarship Fund', icon: '🎓', type: 'Restricted', color: 'bg-sky-100 text-sky-600 border-sky-200' },
+  ],
+  grants: ['None', '2024 State Grant 🏛️', 'Community Foundation 🤝']
+};
+
+const COLOR_OPTIONS = [
+  { name: 'Rose', class: 'bg-rose-100 text-rose-600 border-rose-200' },
+  { name: 'Sky', class: 'bg-sky-100 text-sky-600 border-sky-200' },
+  { name: 'Emerald', class: 'bg-emerald-100 text-emerald-600 border-emerald-200' },
+  { name: 'Amber', class: 'bg-amber-100 text-amber-600 border-amber-200' },
+];
+
+const ICON_OPTIONS = ['💰', '🍎', '🎓', '🏗️', '💻', '🎨', '🤝', '🌍', '🏥', '🚌'];
+
+// --- Helpers ---
+const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+
+// --- Components ---
+
+// Fixed Card component with forwardRef for Framer Motion compatibility
+const Card = forwardRef(({ children, className = "", onClick, delay = 0, ...props }, ref) => (
+  <motion.div 
+    ref={ref}
+    initial={{ opacity: 0, scale: 0.9 }}
+    animate={{ opacity: 1, scale: 1 }}
+    transition={{ duration: 0.4, delay: delay * 0.05, type: "spring" }}
+    whileHover={onClick ? { y: -4, cursor: 'pointer' } : {}}
+    className={`bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 ${className}`}
+    onClick={onClick}
+    {...props}
+  >
+    {children}
+  </motion.div>
+));
+
+const TransactionItem = forwardRef(({ t, funds, users, onClick, delay }, ref) => {
+  const fundData = funds.find(f => f.name === t.fund) || funds[0];
+  const userData = users.find(u => u.id === t.userId);
+  
+  return (
+    <motion.div
+      ref={ref}
+      layout
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      transition={{ delay: delay * 0.03 }}
+      onClick={() => onClick(t)}
+      className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 hover:border-indigo-200 hover:shadow-xl hover:shadow-indigo-500/5 transition-all flex items-center gap-4 cursor-pointer group"
+    >
+      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl shrink-0 ${t.type === 'income' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+        {t.type === 'income' ? <ArrowDownLeft size={20} /> : <ArrowUpRight size={20} />}
+      </div>
+      <div className="flex-1 min-w-0">
+        <h4 className="font-bold text-slate-800 truncate">{t.description}</h4>
+        <div className="flex items-center gap-2 mt-1">
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${fundData.color}`}>
+            {fundData.icon} {t.fund}
+          </span>
+          <span className="text-[10px] text-slate-400 font-medium">📅 {formatDate(t.date)}</span>
+        </div>
+      </div>
+      <div className="flex items-center gap-4">
+        {userData && (
+          <div className="hidden sm:flex flex-col items-end">
+            <span className="text-xl" title={`${userData.firstName} ${userData.lastName}`}>{userData.icon}</span>
+          </div>
+        )}
+        <div className="text-right">
+          <p className={`font-black text-lg ${t.type === 'income' ? 'text-emerald-500' : 'text-slate-700'}`}>
+            {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
+          </p>
+        </div>
+      </div>
+    </motion.div>
+  );
+});
+
+// --- Main Application ---
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState('dashboard'); 
+  const [selectedFund, setSelectedFund] = useState(null);
+  const [editingTransaction, setEditingTransaction] = useState(null);
+  const [isTxModalOpen, setIsTxModalOpen] = useState(false);
+  
+  const [data, setData] = useState(DEFAULT_DATA);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) setData(JSON.parse(saved));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }, [data]);
+
+  const getFundBalance = (fundName) => {
+    return data.transactions
+      .filter(t => t.fund === fundName)
+      .reduce((acc, curr) => curr.type === 'income' ? acc + Number(curr.amount) : acc - Number(curr.amount), 0);
+  };
+
+  const totalAssets = data.transactions.reduce((acc, curr) => 
+    curr.type === 'income' ? acc + Number(curr.amount) : acc - Number(curr.amount), 0
+  );
+
+  const saveTransaction = (tx) => {
+    if (tx.id) {
+      setData(prev => ({ ...prev, transactions: prev.transactions.map(item => item.id === tx.id ? tx : item) }));
+    } else {
+      setData(prev => ({ ...prev, transactions: [{ ...tx, id: Date.now() }, ...prev.transactions] }));
+    }
+    setEditingTransaction(null);
+    setIsTxModalOpen(false);
+  };
+
+  const deleteTransaction = (id) => {
+    setData(prev => ({ ...prev, transactions: prev.transactions.filter(t => t.id !== id) }));
+    setEditingTransaction(null);
+  };
+
+  const saveUser = (user) => {
+    if (user.id) {
+      setData(prev => ({ ...prev, users: prev.users.map(u => u.id === user.id ? user : u) }));
+    } else {
+      setData(prev => ({ ...prev, users: [...prev.users, { ...user, id: 'u' + Date.now() }] }));
+    }
+  };
+
+  const deleteUser = (id) => {
+    setData(prev => ({ ...prev, users: prev.users.filter(u => u.id !== id) }));
+  };
+
+  const addFund = (fund) => setData(prev => ({ ...prev, funds: [...prev.funds, fund] }));
+  const deleteFund = (id) => {
+    const fundName = data.funds.find(f => f.id === id)?.name;
+    setData(prev => ({
+      ...prev,
+      funds: prev.funds.filter(f => f.id !== id),
+      transactions: prev.transactions.filter(t => t.fund !== fundName)
+    }));
+  };
+
+  const updateProfile = (profile) => setData(prev => ({ ...prev, profile }));
+
+  const DashboardView = () => (
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card className="bg-gradient-to-br from-indigo-500 to-violet-600 text-white border-none shadow-xl shadow-indigo-200">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-indigo-100 text-sm font-bold uppercase tracking-widest mb-1">Total Organization Assets</p>
+              <h2 className="text-5xl font-black tracking-tight">{formatCurrency(totalAssets)}</h2>
+            </div>
+            <div className="w-14 h-14 bg-white/20 rounded-3xl flex items-center justify-center backdrop-blur-md">
+              <PieChart className="text-white" size={28} />
+            </div>
+          </div>
+          <div className="mt-8 flex gap-3">
+             <div className="px-4 py-2 bg-white/10 rounded-2xl text-xs font-bold border border-white/10">Active Funds: {data.funds.length}</div>
+             <div className="px-4 py-2 bg-white/10 rounded-2xl text-xs font-bold border border-white/10">Team Size: {data.users.length}</div>
+          </div>
+        </Card>
+        
+        <div className="grid grid-cols-2 gap-4">
+          <Card className="bg-emerald-50 border-emerald-100 flex flex-col justify-center items-center text-emerald-600">
+            <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center mb-3">
+              <ArrowDownLeft />
+            </div>
+            <p className="text-xs font-bold uppercase">Income</p>
+            <p className="text-xl font-black">{formatCurrency(data.transactions.filter(t => t.type === 'income').reduce((a,c) => a+Number(c.amount),0))}</p>
+          </Card>
+          <Card className="bg-rose-50 border-rose-100 flex flex-col justify-center items-center text-rose-600">
+            <div className="w-12 h-12 bg-rose-100 rounded-2xl flex items-center justify-center mb-3">
+              <ArrowUpRight />
+            </div>
+            <p className="text-xs font-bold uppercase">Expenses</p>
+            <p className="text-xl font-black">{formatCurrency(data.transactions.filter(t => t.type === 'expense').reduce((a,c) => a+Number(c.amount),0))}</p>
+          </Card>
+        </div>
+      </div>
+
+      <div>
+        <div className="flex justify-between items-end mb-4">
+          <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3">
+            <LayoutGrid className="text-indigo-500" /> Fund Hub
+          </h3>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {data.funds.map((f, i) => (
+            <Card key={f.id} delay={i} onClick={() => setSelectedFund(f)} className="group overflow-hidden relative" layoutId={`fund-${f.id}`}>
+              <div className={`absolute top-0 right-0 w-24 h-24 -mr-8 -mt-8 rounded-full opacity-10 ${f.color.split(' ')[0]}`} />
+              <div className="flex justify-between items-start mb-4">
+                <span className="text-3xl p-3 bg-slate-50 rounded-2xl group-hover:scale-110 transition-transform">{f.icon}</span>
+                <span className={`text-[10px] font-black uppercase px-3 py-1 rounded-full border ${f.color}`}>{f.type}</span>
+              </div>
+              <h4 className="text-lg font-bold text-slate-700">{f.name}</h4>
+              <p className="text-3xl font-black text-slate-900 mt-2">{formatCurrency(getFundBalance(f.name))}</p>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const PeopleView = () => {
+    const [newUser, setNewUser] = useState({ firstName: '', lastName: '', title: '', icon: USER_ICONS[0] });
+    const [editingUserId, setEditingUserId] = useState(null);
+
+    const handleSave = () => {
+      saveUser(newUser);
+      setNewUser({ firstName: '', lastName: '', title: '', icon: USER_ICONS[0] });
+      setEditingUserId(null);
+    };
+
+    const startEdit = (user) => {
+      setNewUser(user);
+      setEditingUserId(user.id);
+    };
+
+    return (
+      <div className="space-y-10 max-w-6xl mx-auto">
+        <section className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          {/* Add User Form - Horizontal Layout */}
+          <Card className="lg:col-span-4 border-2 border-indigo-100">
+            <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
+              <UserPlus className="text-indigo-500" /> {editingUserId ? 'Modify Team Member' : 'Add New Team Member'}
+            </h3>
+            <div className="flex flex-col xl:flex-row items-start xl:items-end gap-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Icon</label>
+                <div className="flex flex-wrap gap-2 max-w-[240px]">
+                  {USER_ICONS.map(i => (
+                    <button 
+                      key={i} 
+                      onClick={() => setNewUser({...newUser, icon: i})}
+                      className={`text-xl w-10 h-10 rounded-xl flex items-center justify-center transition-all ${newUser.icon === i ? 'bg-indigo-600 shadow-lg scale-110 text-white' : 'bg-slate-50 hover:bg-slate-100'}`}
+                    >
+                      {i}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">First Name</label>
+                  <input 
+                    type="text" placeholder="e.g. Jane" 
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={newUser.firstName}
+                    onChange={e => setNewUser({...newUser, firstName: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Last Name</label>
+                  <input 
+                    type="text" placeholder="e.g. Doe" 
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={newUser.lastName}
+                    onChange={e => setNewUser({...newUser, lastName: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Job Title</label>
+                  <input 
+                    type="text" placeholder="e.g. Volunteer" 
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={newUser.title}
+                    onChange={e => setNewUser({...newUser, title: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 w-full xl:w-auto">
+                <button 
+                  disabled={!newUser.firstName || !newUser.lastName}
+                  onClick={handleSave}
+                  className="flex-1 xl:flex-initial xl:px-8 py-4 bg-slate-900 text-white rounded-2xl font-black hover:bg-indigo-600 disabled:opacity-50 transition-all shadow-lg flex items-center justify-center gap-2"
+                >
+                  <Plus size={20} strokeWidth={3} />
+                  {editingUserId ? 'Save' : 'Add'}
+                </button>
+                {editingUserId && (
+                   <button 
+                    onClick={() => {setEditingUserId(null); setNewUser({ firstName: '', lastName: '', title: '', icon: USER_ICONS[0] });}}
+                    className="p-4 bg-slate-100 text-slate-500 rounded-2xl hover:bg-slate-200 transition-all"
+                   >
+                     <X size={20} />
+                   </button>
+                )}
+              </div>
+            </div>
+          </Card>
+
+          {/* User List - Using the requested card style */}
+          <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <AnimatePresence mode="popLayout">
+              {data.users.map((u, i) => (
+                <Card 
+                  key={u.id} 
+                  delay={i} 
+                  layout
+                  className="group overflow-hidden relative"
+                  onClick={() => startEdit(u)}
+                >
+                  {/* Background decoration matching fund style */}
+                  <div className="absolute top-0 right-0 w-20 h-20 -mr-6 -mt-6 rounded-full opacity-5 bg-indigo-600" />
+                  
+                  <div className="flex justify-between items-start mb-4">
+                    <span className="text-3xl p-3 bg-slate-50 rounded-2xl group-hover:scale-110 transition-transform">
+                      {u.icon}
+                    </span>
+                    <div className="flex gap-1">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); startEdit(u); }} 
+                        className="p-2 text-slate-300 hover:text-indigo-500 transition-colors"
+                      >
+                        <Edit3 size={16}/>
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); deleteUser(u.id); }} 
+                        className="p-2 text-slate-300 hover:text-rose-500 transition-colors"
+                      >
+                        <Trash2 size={16}/>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <h4 className="text-lg font-bold text-slate-800 truncate">
+                    {u.firstName} {u.lastName}
+                  </h4>
+                  
+                  <div className="mt-2 flex items-center justify-between">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500 bg-indigo-50 px-3 py-1 rounded-full">
+                      {u.title}
+                    </p>
+                    <span className="text-[10px] font-bold text-slate-400">Team Member</span>
+                  </div>
+                </Card>
+              ))}
+            </AnimatePresence>
+            
+            {data.users.length === 0 && (
+              <div className="col-span-full py-20 text-center border-2 border-dashed border-slate-100 rounded-[2.5rem] text-slate-400 font-bold">
+                Your team is empty. Invite your first colleague above!
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    );
+  };
+
+  const ProfileView = () => {
+    const [tempProfile, setTempProfile] = useState(data.profile);
+    const [savedNotice, setSavedNotice] = useState(false);
+
+    return (
+      <div className="max-w-2xl mx-auto space-y-8 pb-20">
+        <Card className="border-2 border-indigo-100 overflow-hidden">
+          <div className="bg-indigo-600 -m-6 p-10 mb-6 text-center text-white relative">
+            <div className="text-7xl mb-4 drop-shadow-lg">{tempProfile.icon}</div>
+            <h3 className="text-2xl font-black">Organization Identity</h3>
+          </div>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-400 uppercase ml-1">Nonprofit Name</label>
+              <input 
+                type="text" 
+                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
+                value={tempProfile.name}
+                onChange={e => setTempProfile({...tempProfile, name: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-400 uppercase ml-1">Mission Statement</label>
+              <textarea 
+                rows="3"
+                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-600"
+                value={tempProfile.mission}
+                onChange={e => setTempProfile({...tempProfile, mission: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-400 uppercase ml-1">Cause Icon</label>
+              <div className="grid grid-cols-4 gap-3">
+                {CAUSE_ICONS.map(item => (
+                  <button 
+                    key={item.label}
+                    onClick={() => setTempProfile({...tempProfile, icon: item.icon})}
+                    className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 ${tempProfile.icon === item.icon ? 'border-indigo-500 bg-indigo-50 shadow-md' : 'border-slate-100 hover:border-slate-200'}`}
+                  >
+                    <span className="text-2xl">{item.icon}</span>
+                    <span className="text-[10px] font-bold text-slate-500">{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button 
+              onClick={() => { updateProfile(tempProfile); setSavedNotice(true); setTimeout(() => setSavedNotice(false), 2000); }}
+              className={`w-full py-4 rounded-2xl font-black text-white transition-all flex items-center justify-center gap-2 shadow-lg ${savedNotice ? 'bg-emerald-500' : 'bg-slate-900 hover:bg-indigo-600'}`}
+            >
+              {savedNotice ? <><CheckCircle2 size={20}/> Changes Saved!</> : <><Save size={20}/> Update Profile</>}
+            </button>
+          </div>
+        </Card>
+      </div>
+    );
+  };
+
+  const ConfigurationView = () => {
+    const [newFund, setNewFund] = useState({ name: '', icon: ICON_OPTIONS[0], color: COLOR_OPTIONS[0].class, type: 'Unrestricted' });
+
+    return (
+      <div className="max-w-4xl mx-auto space-y-10 pb-20">
+        <section>
+          <div className="mb-6">
+            <h3 className="text-2xl font-black text-slate-800">Funds Setup</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="border-2 border-indigo-100 h-fit">
+              <h4 className="font-black text-indigo-600 mb-4 flex items-center gap-2"><PlusCircle size={18}/> New Fund</h4>
+              <div className="space-y-4">
+                <input 
+                  type="text" placeholder="Fund Name" 
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
+                  value={newFund.name}
+                  onChange={e => setNewFund({...newFund, name: e.target.value})}
+                />
+                <div className="flex gap-2 flex-wrap">
+                  {ICON_OPTIONS.map(icon => (
+                    <button key={icon} onClick={() => setNewFund({...newFund, icon})} className={`text-xl w-10 h-10 rounded-xl flex items-center justify-center transition-all ${newFund.icon === icon ? 'bg-indigo-500 shadow-lg' : 'bg-slate-100'}`}>{icon}</button>
+                  ))}
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {COLOR_OPTIONS.map(c => (
+                    <button key={c.name} onClick={() => setNewFund({...newFund, color: c.class})} className={`w-8 h-8 rounded-full border-4 transition-all ${c.class.split(' ')[0]} ${newFund.color === c.class ? 'border-slate-800' : 'border-transparent'}`}/>
+                  ))}
+                </div>
+                <button 
+                  disabled={!newFund.name}
+                  onClick={() => { addFund({...newFund, id: Date.now()}); setNewFund({ name: '', icon: ICON_OPTIONS[0], color: COLOR_OPTIONS[0].class, type: 'Unrestricted' }); }}
+                  className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black hover:bg-indigo-700 shadow-lg"
+                >
+                  Create Fund
+                </button>
+              </div>
+            </Card>
+            <div className="space-y-3">
+              {data.funds.map(f => (
+                <div key={f.id} className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{f.icon}</span>
+                    <span className="font-bold text-slate-700">{f.name}</span>
+                  </div>
+                  <button onClick={() => deleteFund(f.id)} className="p-2 text-rose-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={18} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-indigo-50/30 flex flex-col md:flex-row overflow-hidden font-sans text-slate-900">
+      <nav className="w-full md:w-24 lg:w-64 bg-white border-r border-slate-100 flex flex-row md:flex-col items-center py-4 md:py-10 px-4 z-30 shadow-2xl shadow-slate-200/50">
+        <motion.div 
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className={`lg:w-full flex items-center justify-center lg:justify-start lg:px-4 mb-0 md:mb-12 cursor-pointer transition-all ${activeTab === 'profile' ? 'text-indigo-600' : 'text-slate-700 hover:text-indigo-600'}`}
+          onClick={() => {setActiveTab('profile'); setSelectedFund(null);}}
+        >
+          <span className="text-3xl drop-shadow-sm">{data.profile.icon}</span>
+          <span className={`hidden lg:block font-black tracking-tighter ml-3 text-xl truncate ${activeTab === 'profile' ? 'text-indigo-600' : 'text-slate-900'}`}>{data.profile.name}</span>
+        </motion.div>
+        
+        <div className="flex flex-row md:flex-col gap-4 ml-auto md:ml-0 md:w-full">
+          <NavButton active={activeTab === 'dashboard'} onClick={() => {setActiveTab('dashboard'); setSelectedFund(null);}} icon={PieChart} label="Dashboard" color="indigo" />
+          <NavButton active={activeTab === 'transactions'} onClick={() => {setActiveTab('transactions'); setSelectedFund(null);}} icon={List} label="Activity" color="emerald" />
+          <NavButton active={activeTab === 'people'} onClick={() => {setActiveTab('people'); setSelectedFund(null);}} icon={Users} label="People" color="rose" />
+          <NavButton active={activeTab === 'settings'} onClick={() => {setActiveTab('settings'); setSelectedFund(null);}} icon={Settings} label="Setup" color="amber" />
+        </div>
+
+        <div className="hidden lg:block mt-auto w-full p-4">
+           <div className="bg-indigo-50 p-4 rounded-3xl border border-indigo-100">
+             <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Active Mission</p>
+             <p className="text-[11px] font-bold text-indigo-700 leading-tight italic truncate">"{data.profile.mission}"</p>
+           </div>
+        </div>
+      </nav>
+
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] bg-indigo-200/20 blur-[120px] rounded-full -z-10" />
+        <div className="absolute bottom-[-10%] left-[-5%] w-[30%] h-[30%] bg-rose-200/20 blur-[120px] rounded-full -z-10" />
+
+        <header className="h-24 flex items-center justify-between px-6 md:px-12 z-10">
+          <div>
+            <h1 className="text-3xl font-black text-slate-800 tracking-tight">
+              {activeTab === 'dashboard' ? (selectedFund ? selectedFund.name : 'Financial Health') : 
+               activeTab === 'transactions' ? 'Transaction Log' : 
+               activeTab === 'people' ? 'Team Directory' :
+               activeTab === 'profile' ? 'Org Profile' : 'Configuration'}
+            </h1>
+          </div>
+          <button 
+            onClick={() => setIsTxModalOpen(true)}
+            className="bg-slate-900 text-white p-4 md:px-8 md:py-4 rounded-3xl font-black flex items-center gap-3 hover:bg-indigo-600 transition-all shadow-xl shadow-indigo-100 hover:-translate-y-1 active:scale-95"
+          >
+            <Plus size={20} strokeWidth={3} /> <span className="hidden md:inline">Add Entry</span>
+          </button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto px-6 md:px-12 pb-12 custom-scrollbar">
+          <div className="max-w-6xl mx-auto">
+            {activeTab === 'dashboard' ? (
+              selectedFund ? (
+                <FundDetailView 
+                  fund={selectedFund} 
+                  transactions={data.transactions} 
+                  balance={getFundBalance(selectedFund.name)} 
+                  onBack={() => setSelectedFund(null)} 
+                  onEdit={setEditingTransaction}
+                  funds={data.funds}
+                  users={data.users}
+                />
+              ) : <DashboardView />
+            ) : activeTab === 'transactions' ? (
+              <div className="space-y-4">
+                 <AnimatePresence mode="popLayout">
+                    {data.transactions
+                      .sort((a,b) => new Date(b.date) - new Date(a.date))
+                      .map((t, i) => (
+                        <TransactionItem key={t.id} t={t} funds={data.funds} users={data.users} onClick={setEditingTransaction} delay={i} />
+                    ))}
+                 </AnimatePresence>
+              </div>
+            ) : activeTab === 'people' ? <PeopleView /> : activeTab === 'profile' ? <ProfileView /> : <ConfigurationView />}
+          </div>
+        </div>
+      </main>
+
+      <AnimatePresence>
+        {(isTxModalOpen || editingTransaction) && (
+          <TransactionModal 
+            onClose={() => { setIsTxModalOpen(false); setEditingTransaction(null); }}
+            funds={data.funds}
+            users={data.users}
+            grants={data.grants}
+            onSave={saveTransaction}
+            onDelete={deleteTransaction}
+            transaction={editingTransaction}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+const NavButton = ({ active, onClick, icon: Icon, label, color }) => {
+  const colorMap = {
+    indigo: 'text-indigo-600 bg-indigo-50',
+    emerald: 'text-emerald-600 bg-emerald-50',
+    amber: 'text-amber-600 bg-amber-50',
+    rose: 'text-rose-600 bg-rose-50'
+  };
+  return (
+    <button onClick={onClick} className={`w-full flex items-center justify-center lg:justify-start gap-4 p-4 lg:px-6 rounded-[2rem] transition-all group ${active ? colorMap[color] + ' font-black' : 'text-slate-300 hover:text-slate-500 hover:bg-slate-50'}`}>
+      <Icon size={24} strokeWidth={active ? 3 : 2} />
+      <span className="hidden lg:block text-sm">{label}</span>
+    </button>
+  );
+};
+
+const FundDetailView = ({ fund, transactions, balance, onBack, onEdit, funds, users }) => {
+  const fundTxs = transactions.filter(t => t.fund === fund.name).sort((a,b) => new Date(b.date) - new Date(a.date));
+  return (
+    <div className="space-y-8">
+      <div className="flex items-center gap-6">
+        <button onClick={onBack} className="p-4 bg-white rounded-3xl text-slate-400 hover:text-indigo-600 shadow-sm border border-slate-100 transition-all"><ArrowLeft /></button>
+        <div className="flex items-center gap-4">
+          <div className="text-5xl">{fund.icon}</div>
+          <h2 className="text-3xl font-black text-slate-800">{fund.name}</h2>
+        </div>
+      </div>
+      <Card className="bg-slate-900 text-white border-none flex items-center justify-between">
+        <div>
+          <p className="text-slate-400 text-xs font-bold uppercase mb-1">Total Assets</p>
+          <h3 className="text-5xl font-black">{formatCurrency(balance)}</h3>
+        </div>
+      </Card>
+      <div className="space-y-4">
+        <AnimatePresence mode="popLayout">
+          {fundTxs.map((t, i) => <TransactionItem key={t.id} t={t} funds={funds} users={users} onClick={onEdit} delay={i} />)}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+};
+
+const TransactionModal = ({ onClose, funds, users, grants, onSave, onDelete, transaction }) => {
+  const [formData, setFormData] = useState(transaction || {
+    type: 'expense',
+    amount: '',
+    description: '',
+    fund: funds[0]?.name || '',
+    grant: 'None',
+    userId: users[0]?.id || '',
+    date: new Date().toISOString().split('T')[0]
+  });
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-slate-900/40 backdrop-blur-xl" onClick={onClose} />
+      <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl relative overflow-hidden">
+        <div className="p-8 pb-0 flex justify-between">
+          <h2 className="text-3xl font-black text-slate-800">{transaction ? 'Edit Record' : 'New Entry'}</h2>
+          <button onClick={onClose} className="p-2 bg-slate-50 rounded-full"><X /></button>
+        </div>
+        <div className="p-8 space-y-6">
+          <div className="flex gap-2 bg-slate-100 p-1.5 rounded-2xl w-fit">
+            {['income', 'expense'].map(t => (
+              <button key={t} onClick={() => setFormData({...formData, type: t})} className={`px-6 py-2 rounded-xl text-sm font-black transition-all capitalize ${formData.type === t ? 'bg-white text-indigo-600 shadow' : 'text-slate-400'}`}>{t}</button>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+             <input type="number" placeholder="Amount" className="p-4 bg-slate-50 border rounded-2xl font-black outline-none" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} />
+             <input type="date" className="p-4 bg-slate-50 border rounded-2xl font-bold outline-none" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
+          </div>
+          <input type="text" placeholder="Description" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-none" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
+          
+          <div className="grid grid-cols-1 gap-4">
+             <div className="space-y-1">
+               <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Team Member Responsible</label>
+               <select className="w-full p-4 bg-rose-50 border border-rose-100 rounded-2xl font-black text-rose-900" value={formData.userId} onChange={e => setFormData({...formData, userId: e.target.value})}>
+                 {users.map(u => <option key={u.id} value={u.id}>{u.icon} {u.firstName} {u.lastName}</option>)}
+               </select>
+             </div>
+             <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-1">
+                 <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Fund</label>
+                 <select className="w-full p-4 bg-indigo-50 border border-indigo-100 rounded-2xl font-black text-indigo-900" value={formData.fund} onChange={e => setFormData({...formData, fund: e.target.value})}>
+                   {funds.map(f => <option key={f.id} value={f.name}>{f.icon} {f.name}</option>)}
+                 </select>
+               </div>
+               <div className="space-y-1">
+                 <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Grant</label>
+                 <select className="w-full p-4 bg-amber-50 border border-amber-100 rounded-2xl font-black text-amber-900" value={formData.grant} onChange={e => setFormData({...formData, grant: e.target.value})}>
+                   {grants.map(g => <option key={g} value={g}>{g}</option>)}
+                 </select>
+               </div>
+             </div>
+          </div>
+          
+          <div className="flex gap-4 pt-4">
+            {transaction && (
+              <button onClick={() => onDelete(transaction.id)} className="p-5 bg-rose-50 text-rose-500 rounded-2xl"><Trash2 size={24} /></button>
+            )}
+            <button onClick={() => onSave(formData)} className="flex-1 bg-slate-900 text-white py-5 rounded-2xl font-black text-lg hover:bg-indigo-600 transition-all shadow-xl">Save Changes</button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
